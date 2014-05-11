@@ -5,7 +5,9 @@ using std::vector;
 #include <string>
 using std::string;
 
-
+/*
+This class represents an Interpolated Markov Model
+*/
 class IMM {
 protected:
 	int order, window;

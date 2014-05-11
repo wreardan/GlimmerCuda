@@ -1,6 +1,13 @@
+#include <assert.h>
 
 #include "imm_test.h"
 #include "imm.h"
+
+void imm_test() {
+	assert(test_imm_1());
+	assert(test_imm_2());
+}
+
 
 bool test_imm_1() {
 	IMM imm;

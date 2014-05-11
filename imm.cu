@@ -47,19 +47,6 @@ __host__ __device__ unsigned int power (unsigned int x, unsigned int y)
 	return result;
 }
 
-/* Function to calculate x raised to the power y */
-//http://www.geeksforgeeks.org/write-a-c-program-to-calculate-powxn/
-__host__ __device__ int power2(int x, unsigned int y)
-{
-    if( y == 0)
-        return 1;
-    else if (y%2 == 0)
-        return power(x, y/2)*power(x, y/2);
-    else
-        return x*power(x, y/2)*power(x, y/2);
- 
-}
-
 //window is the size of the sliding window
 //order is the markov-order of the model
 void IMM::init(int window, int order) {
@@ -84,37 +71,29 @@ void IMM::init(int window, int order) {
 __global__ void counting_kernel(int *model, char * sequences, int pos_size, int max_order, int window) {
     int num = threadIdx.x; //sequence number
 	int position = threadIdx.y; //position index
+	int order = threadIdx.z; //order number
+
+	if(position + order >= window) {
+		return;
+	}
     
 	//get sequence
-	char * sequence = sequences + num * window;
+	char * sequence = sequences + num * window + position;
 
+	//compute index, order_index
 	int index = 0;
-	int order_sum = 0;
-	for(int i = 0; i < window; i++) {
+	for(int i = 0; i < order+1; i++) {
 		index = index * 4 + *(sequence+i);
-		int * count = model + index + order_sum;
-		count += position * pos_size;
-		atomicAdd(count, 1);
-		order_sum += power(4, i+1);
+	}
+	int order_index = 0;
+	for(int i = 0; i < order; i++) {
+		order_index += power(4, i+1);
 	}
 
-
-/*
-	//get index of sequence
-	int index = 0;
-	int order_sum = 0;
-	int win = min(window, position + 1);
-	win = min(win, window - position);
-	for(int i = 0; i < win; i++) {
-		index = index * 4 + *(sequence+i);
-		int * count = model + order_sum + index + pos_size * position;
-		atomicAdd(count, 1);
-		order_sum += power(4, i+1);
-	}
-*/
-	//add to model
-	//int model_index = order * window * sizeof(int);
-	//TODO: Multiple orders
+	//increment count
+	int * count = model + index + order_index + pos_size * order;
+	count += position * pos_size;
+	atomicAdd(count, 1);
 }
 
 //Add Sequences to the Model
@@ -140,7 +119,7 @@ void IMM::add(vector<string> sequences) {
 
 	//invoke counting kernel
 	int num_sequences = sequences.size();
-	dim3 threads_per_block(num_sequences,window,1);
+	dim3 threads_per_block(num_sequences,2,order+1);
 	dim3 blocks(1,1,1);
     counting_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, order_sum, order, window);
 

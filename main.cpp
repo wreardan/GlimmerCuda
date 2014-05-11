@@ -15,8 +15,7 @@ int main()
 	Sequence sequence;
 	sequence.load("ACGTTACGA");
 
-	//assert(test_imm_1());
-	assert(test_imm_2());
+	imm_test();
 
     return 0;
 }
