@@ -93,6 +93,7 @@ __global__ void counting_kernel(int *model, char * sequences, int pos_size, int 
 	for(int i = 0; i < window; i++) {
 		index = index * 4 + *(sequence+i);
 		int * count = model + index + order_sum;
+		count += position * pos_size;
 		atomicAdd(count, 1);
 		order_sum += power(4, i+1);
 	}
@@ -139,7 +140,7 @@ void IMM::add(vector<string> sequences) {
 
 	//invoke counting kernel
 	int num_sequences = sequences.size();
-	dim3 threads_per_block(num_sequences,1,1);
+	dim3 threads_per_block(num_sequences,window,1);
 	dim3 blocks(1,1,1);
     counting_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, order_sum, order, window);
 
