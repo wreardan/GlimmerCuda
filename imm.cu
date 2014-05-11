@@ -223,8 +223,18 @@ __device__ __host__ void build_distribution(int * model, char * sequence, int le
 
 
 //Performs a Chi^2 test on a pair of orders (order, order+1) with sequence at index
-__device__ __host__ float score_order_pair(int * model, char * sequence, int index, int order) {
-	return 0.0f;
+__device__ __host__ float score_order_pair(int * model, char * sequence, int order) {
+	//create distribution with lower-order model
+	int lower_order_dist[4];
+	build_distribution(model, sequence, order+1, lower_order_dist);
+	//create distribution with order+1 model
+	int higher_order_dist[4];
+	build_distribution(model, sequence, order+2, higher_order_dist);
+	//chi-squared test
+	int table[8];
+	build_chi2_table(lower_order_dist, higher_order_dist, table, 4);
+	float score = chi_squared_score(table, 4);
+	return score;
 }
 
 

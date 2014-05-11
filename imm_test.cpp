@@ -52,6 +52,9 @@ bool test_build_distribution() {
 	int expected0[] = {2,2,2,2};
 	assert_memory_equal(dist, expected0);
 
+	sequence = "\0";
+	float chi2 = score_order_pair(model, sequence, 0);
+	assert(abs(chi2 - 0.325f) < 0.001f);
 
 	return true;
 }
