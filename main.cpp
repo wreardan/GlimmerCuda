@@ -3,23 +3,20 @@
 #include "device_launch_parameters.h"
 
 #include <stdio.h>
+#include <assert.h>
 
 
 #include "sequence.h"
-#include "imm.h"
+
+#include "imm_test.h"
 
 int main()
 {
 	Sequence sequence;
 	sequence.load("ACGTTACGA");
 
-	IMM imm;
-	imm.init(1, 0);
-	
-	vector<string> sequences;
-	sequences.push_back("ATGTATACGGGATAA");
-	sequences.push_back("TTGGGGATAGAGGAA");
-	imm.add(sequences);
+	//assert(test_imm_1());
+	assert(test_imm_2());
 
     return 0;
 }
