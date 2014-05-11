@@ -1,12 +1,17 @@
 #pragma once
 
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+
 #include <vector>
 using std::vector;
 #include <string>
 using std::string;
 
 //Testing functions
-bool test_chi_squared_test();
+__host__ __device__ void build_distribution(int * model, char * sequence, int length, int *output);
+__host__ __device__ void build_chi2_table(int * dist1, int * dist2, int * output, int length);
+__host__ __device__ float chi_squared_score(int * table, int length);
 
 /*
 This class represents an Interpolated Markov Model

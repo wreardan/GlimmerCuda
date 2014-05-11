@@ -1,7 +1,5 @@
 #include "imm.h"
 
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
 #include <assert.h>
 #include <algorithm>
 #include <sstream>
@@ -95,6 +93,21 @@ __host__ __device__ int get_sequence_index(char * sequence, int length) {
 }
 
 
+__host__ __device__ int get_order_index(char * sequence, int order) {
+	int order_index = 0;
+	for(int i = 0; i < order; i++) {
+		order_index += power(4, i+1);
+	}
+	return order_index;
+}
+
+
+__host__ __device__ int get_sequence_order_index(char * sequence, int order) {
+	int index = get_sequence_index(sequence, order + 1);
+	int order_index = get_order_index(sequence, order);
+	return index + order_index;
+}
+
 
 //this kernel builds the imm from a set of training sequences
 __global__ void counting_kernel(int *model, char * sequences, int pos_size, int max_order, int window) {
@@ -110,14 +123,10 @@ __global__ void counting_kernel(int *model, char * sequences, int pos_size, int 
 	char * sequence = sequences + num * window + position;
 
 	//compute index, order_index
-	int index = get_sequence_index(sequence, order+1);
-	int order_index = 0;
-	for(int i = 0; i < order; i++) {
-		order_index += power(4, i+1);
-	}
+	int index = get_sequence_order_index(sequence, order);
 
 	//increment count
-	int * count = model + index + order_index + pos_size * order;
+	int * count = model + index + pos_size * order;
 	count += position * pos_size;
 	atomicAdd(count, 1);
 }
@@ -199,29 +208,29 @@ __device__ __host__ void build_chi2_table(int * dist1, int * dist2, int * output
 	}
 }
 
-//Test to see if the chi_squared_score and build_chi2_table methods work correctly
-bool test_chi_squared_test() {
-	int dist1[] = {25,9,11,17};
-	int dist2[] = {1,1,59,1};
-	int table[8];
-	int expected_table[] = {25,1,9,1,11,59,17,1};
-
-	build_chi2_table(dist1, dist2, table, 4);
-	float result = chi_squared_score(table, 4);
-	int eq = memcmp(table, expected_table, sizeof(table));
-	assert(eq == 0);
-	return (abs(result - 75.69f) < 0.001);
-}
-
-
 //Build a distribution from an order of the model based on a subsequence
-__device__ __host__ void build_distribution(int * model, char * sequence, int length) {
-	
+__device__ __host__ void build_distribution(int * model, char * sequence, int length, int *output) {
+	//TODO: take position into account, or input custom model pointer
+	int order_index = get_order_index(sequence, length-1);
+	int index = get_sequence_index(sequence, length-1) * 4;
+	index += order_index;
+
+	for(int b = 0; b < 4; b++) {
+		output[b] = model[index+b];
+	}
 }
 
 
 
-__global__ void scoring_kernel(int *model, char * sequences, float * scores) {
+//Performs a Chi^2 test on a pair of orders (order, order+1) with sequence at index
+__device__ __host__ float score_order_pair(int * model, char * sequence, int index, int order) {
+	return 0.0f;
+}
+
+
+
+
+__global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int max_order) {
     int num = threadIdx.x; //sequence number
 	int position = threadIdx.y; //position index
 	int order = threadIdx.z; //order number
