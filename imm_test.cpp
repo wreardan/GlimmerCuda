@@ -3,9 +3,14 @@
 #include "imm_test.h"
 #include "imm.h"
 
+
 void imm_test() {
 	assert(test_imm_1());
 	assert(test_imm_2());
+
+	assert(test_chi_squared_test());
+
+	printf("imm_test() completed succesfully, congrats!\n");
 }
 
 
@@ -35,7 +40,7 @@ bool test_imm_1() {
 bool test_imm_2() {
 	IMM imm;
 	imm.init(2, 1);
-	
+
 	vector<string> sequences;
 	sequences.push_back("AA");
 	sequences.push_back("AA");
@@ -52,8 +57,8 @@ bool test_imm_2() {
 	imm.dump(actual);
 
 	int arr[] = {
-		5,1,1,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
-		2,2,2,2, 2,1,1,1, 0,1,0,0, 0,0,1,0, 0,0,0,1,
+		5,1,1,1,  0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		2,2,2,2,  2,1,1,1, 0,1,0,0, 0,0,1,0, 0,0,0,1,
 	};
 	vector<int> expected(arr, arr + sizeof(arr) / sizeof(arr[0]));
 
