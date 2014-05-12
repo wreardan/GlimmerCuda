@@ -7,13 +7,14 @@
 
 
 void imm_test() {
-	//assert(test_imm_1());
-	//assert(test_imm_2());
-	//assert(test_imm_3());
+	/*assert(test_imm_1());
+	assert(test_imm_2());
+	assert(test_imm_3());*/
+	//test_imm_start_codons();
 	assert(test_imm_4());
 
-	//assert(test_chi_squared_test());
-	//assert(test_build_distribution());
+	assert(test_chi_squared_test());
+	assert(test_build_distribution());
 
 	printf("imm_test() completed succesfully, congrats!\n");
 }
@@ -41,16 +42,16 @@ bool test_build_distribution() {
 	int dist[4]= {0,0,0,0};
 	
 	char * sequence = "\1";
-	build_distribution(model, sequence, 2, dist);
+	build_distribution(model, sequence, 1, dist);
 	int expected[4] = {0,1,0,0};
 	assert_memory_equal(dist, expected);
 
 	sequence = "\3";
-	build_distribution(model, sequence, 2, dist);
+	build_distribution(model, sequence, 1, dist);
 	int expected2[] = {0,0,0,1};
 	assert_memory_equal(dist, expected2);
 	
-	build_distribution(model, sequence, 1, dist);
+	build_distribution(model, sequence, 0, dist);
 	int expected0[] = {2,2,2,2};
 	assert_memory_equal(dist, expected0);
 
@@ -83,6 +84,59 @@ bool test_imm_1() {
 
 	return expected == actual;
 }
+
+bool test_imm_start_codons() {
+	IMM imm;
+	imm.init(3, 2);
+
+	vector<string> sequences;
+	sequences.push_back("ATG");
+	sequences.push_back("GTG");
+	sequences.push_back("TTG");
+	sequences.push_back("ATT");
+	sequences.push_back("CTG");
+
+	imm.add(sequences);
+
+	string filename = "chisquare_df3_pvalues";
+	imm.load_pvalues(filename);
+
+	vector<int> actual;
+	imm.dump(actual);
+
+	int arr[] = {
+		//First Position
+		2,1,1,1, //0th order
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, //1st order
+
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, //2nd order
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		//Second Position
+		0,0,0,5, //0th order
+		
+		0,0,0,2, 0,0,0,1, 0,0,0,1, 0,0,0,1, //1st order
+
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, //2nd order
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		//Third Position
+		0,0,4,1, //0th order
+		
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,4,1, //1st order
+
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,1, //2nd order
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0,
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0,
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,1,0,
+	};
+	vector<int> expected(arr, arr + sizeof(arr) / sizeof(arr[0]));
+
+	return expected == actual;
+}
+
 
 void test_setup_2(IMM & imm) {
 	imm.init(2, 1);
@@ -161,14 +215,21 @@ bool test_imm_4() {
 	vector<string> training_sequences;
 	filename = "hw3_train_real";
 	read_sequences(training_sequences, filename);
+	//training_sequences.resize(1);
 	imm.add(training_sequences);
 
 	vector<int> dumped;
 	imm.dump(dumped);
-
+	
 	/*
-	for(int i = 0; i < dumped.size(); i++) {
-		printf("%d\n", dumped[i]);
+	for(int i = 0; i < 24; i++) {
+		printf("%d %d\n", i, dumped[i]);
+	}
+	for(int i = 5460; i < 5460+24; i++) {
+		printf("%d %d\n", i, dumped[i]);
+	}
+	for(int i = 5460*2; i < 5460*2+24; i++) {
+		printf("%d %d\n", i, dumped[i]);
 	}
 	*/
 	
@@ -179,11 +240,11 @@ bool test_imm_4() {
 	test_sequences.resize(1);
 	imm.score(test_sequences, scores);
 	
-	/*
+	
 	for(int i = 0; i < scores.size(); i++) {
 		printf("%f\n", scores[i]);
 	}
-	*/
+	
 
 	return true;
 }

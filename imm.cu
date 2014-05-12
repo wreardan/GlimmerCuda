@@ -125,7 +125,7 @@ __host__ __device__ int get_sequence_index(char * sequence, int length) {
 }
 
 
-__host__ __device__ int get_order_index(char * sequence, int order) {
+__host__ __device__ int get_order_index(int order) {
 	int order_index = 0;
 	for(int i = 0; i < order; i++) {
 		order_index += power(4, i+1);
@@ -136,14 +136,14 @@ __host__ __device__ int get_order_index(char * sequence, int order) {
 
 __host__ __device__ int get_sequence_order_index(char * sequence, int order) {
 	int index = get_sequence_index(sequence, order + 1);
-	int order_index = get_order_index(sequence, order);
+	int order_index = get_order_index(order);
 	return index + order_index;
 }
 
 
 __host__ __device__ int get_dist_sequence_order_index(char * sequence, int order) {
 	int index = get_sequence_index(sequence, order) * 4;
-	int order_index = get_order_index(sequence, order);
+	int order_index = get_order_index(order);
 	return index + order_index;
 }
 
@@ -166,7 +166,7 @@ __global__ void counting_kernel(int *model, char * sequences, int pos_size, int 
 
 	//increment count
 	int * count = model + index;
-	count += position * pos_size;
+	count += (position+order) * pos_size;
 	atomicAdd(count, 1);
 }
 
@@ -265,6 +265,8 @@ __device__ __host__ float score_order_pair(int * model, char * sequence, int ord
 
 //Computes lambdas then score the sequence
 __global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int max_order, int pos_size, float * pvalues) {
+	char * sequence_position;
+
     int num = threadIdx.x; //sequence number
 	int position = threadIdx.y; //position index
     
@@ -278,7 +280,7 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 	max_order = min(max_order, position);
 	for(int order = 0; order < max_order; order++) {
 		int next_order_count;
-		char * sequence_position = sequence + position - order;
+		sequence_position = sequence + position - order;
 		float chi2_score = score_order_pair(model, sequence_position, order, &next_order_count);
 		int chi2_index = (int)(chi2_score * 10.0f);
 		chi2_index = min(chi2_index, 50);
@@ -294,28 +296,30 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 		}
 		lambdas[order+1] = value;
 		//printf("%d, %d, %d, %f\n", num, order+1, position, value);
-		printf("num: %d, order: %d, position: %d, lambda: %f\n", num, order+1, position, value);
+		//printf("num: %d, order: %d, position: %d, lambda: %f\n", num, order+1, position, value);
 	}
 
 	//Score character based on lambdas
 	float score = 0.0f;
 	float weight = 1.0f;
-	for(int order = max_order-1; order >= 0; order--) {
-		int index = get_sequence_order_index(sequence, order);
+	for(int order = max_order; order >= 0; order--) {
+		sequence_position = sequence + position - order;
+		int index = get_sequence_order_index(sequence_position, order);
 		int count = model[index];
 
-		int dist_index = get_dist_sequence_order_index(sequence, order+1);
+		int dist_index = get_dist_sequence_order_index(sequence_position, order);
 		int sum = 0;
 		for(int base = 0; base < 4; base++) {
 			int c = model[dist_index + base];
 			sum += c;
 		}
+		//printf("%d %d %d %d\n", position, order, count, sum);
 		float probability = (count + 1.0f) / (sum + 4.0f);
 		float weighted = lambdas[order] * weight;
 		score += probability * weighted;
 		weight *= 1 - lambdas[order];
 	}
-	printf("num: %d, position: %d, score: %f\n", num, position, score);
+	printf("num: %d, position: %d, score: %f\n", num, position, log(score));
 
 	int score_index = num*window + position;
 	scores[score_index] = log(score);
