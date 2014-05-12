@@ -162,6 +162,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     <ClCompile Include="imm_test.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Profiler.nvact" />
     <None Include="README.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
