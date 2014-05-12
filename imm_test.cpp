@@ -7,11 +7,12 @@
 
 
 void imm_test() {
-	assert(test_imm_1());
-	assert(test_imm_2());
+	//assert(test_imm_1());
+	//assert(test_imm_2());
+	assert(test_imm_3());
 
-	assert(test_chi_squared_test());
-	assert(test_build_distribution());
+	//assert(test_chi_squared_test());
+	//assert(test_build_distribution());
 
 	printf("imm_test() completed succesfully, congrats!\n");
 }
@@ -53,7 +54,8 @@ bool test_build_distribution() {
 	assert_memory_equal(dist, expected0);
 
 	sequence = "\0";
-	float chi2 = score_order_pair(model, sequence, 0);
+	int next_order_count;
+	float chi2 = score_order_pair(model, sequence, 0, &next_order_count);
 	assert(abs(chi2 - 0.325f) < 0.001f);
 
 	return true;
@@ -81,9 +83,7 @@ bool test_imm_1() {
 	return expected == actual;
 }
 
-
-bool test_imm_2() {
-	IMM imm;
+void test_setup_2(IMM & imm) {
 	imm.init(2, 1);
 
 	vector<string> sequences;
@@ -98,14 +98,51 @@ bool test_imm_2() {
 
 	imm.add(sequences);
 
+	string filename = "chisquare_df3_pvalues";
+	imm.load_pvalues(filename);
+}
+
+
+
+bool test_imm_2() {
+	IMM imm;
+	test_setup_2(imm);
+
 	vector<int> actual;
 	imm.dump(actual);
 
 	int arr[] = {
+		//First Position
 		5,1,1,1,  0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+		//Second Position
 		2,2,2,2,  2,1,1,1, 0,1,0,0, 0,0,1,0, 0,0,0,1,
 	};
 	vector<int> expected(arr, arr + sizeof(arr) / sizeof(arr[0]));
 
 	return expected == actual;
+}
+
+
+bool test_imm_3() {
+	IMM imm;
+	string filename;
+
+	imm.init(9, 8);
+	filename = "chisquare_df3_pvalues";
+	imm.load_pvalues(filename);
+
+	vector<string> training_sequences;
+	filename = "iterated.train";
+	read_fasta(training_sequences, filename);
+	//training_sequences.resize(500);
+	imm.add(training_sequences);
+
+	vector<int> dumped;
+	imm.dump(dumped);
+	
+	vector<string> test_sequences;
+	test_sequences.push_back(string("ATGATTTGA"));
+	imm.score(test_sequences);
+
+	return true;
 }

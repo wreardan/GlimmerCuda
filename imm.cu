@@ -3,6 +3,8 @@
 #include <assert.h>
 #include <algorithm>
 #include <sstream>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 
@@ -29,6 +31,9 @@ IMM::IMM() {
 	order = -1;
 	window = -1;
 	d_counts = NULL;
+	d_chi2_pvalue_table = NULL;
+	order_sum = 0;
+	total_bytes = 0;
 }
 
 
@@ -38,6 +43,11 @@ void IMM::dispose() {
 		d_counts = NULL;
 		order = -1;
 	}
+	if(d_chi2_pvalue_table != NULL) {
+		cudaFree(d_chi2_pvalue_table);
+		d_chi2_pvalue_table = NULL;
+	}
+
 }
 
 
@@ -61,6 +71,25 @@ __host__ __device__ unsigned int power (unsigned int x, unsigned int y)
 	}
 
 	return result;
+}
+
+
+void send_windows_to_gpu(vector<string> & sequences, int window, char **d_seq) {
+    cudaError_t cudaStatus;
+	//Concatenate sequences
+    stringstream ss;
+	for(string & seq : sequences) {
+		ss << seq.substr(0, window);
+	}
+
+	string all = bases_to_indices(ss.str());
+	int size = all.size();
+	
+	//Send sequences to GPU
+	cudaStatus = cudaMalloc(d_seq, size);
+	assert (cudaSuccess == cudaStatus);
+	cudaMemcpy(*d_seq, &all[0], size, cudaMemcpyHostToDevice);
+	assert (cudaSuccess == cudaStatus);
 }
 
 
@@ -112,8 +141,8 @@ __host__ __device__ int get_sequence_order_index(char * sequence, int order) {
 //this kernel builds the imm from a set of training sequences
 __global__ void counting_kernel(int *model, char * sequences, int pos_size, int max_order, int window) {
     int num = threadIdx.x; //sequence number
-	int position = threadIdx.y; //position index
-	int order = threadIdx.z; //order number
+	int position = blockIdx.y; //position index
+	int order = blockIdx.z; //order number
 
 	if(position + order >= window) {
 		return;
@@ -126,41 +155,24 @@ __global__ void counting_kernel(int *model, char * sequences, int pos_size, int 
 	int index = get_sequence_order_index(sequence, order);
 
 	//increment count
-	int * count = model + index + pos_size * order;
+	int * count = model + index;
 	count += position * pos_size;
 	atomicAdd(count, 1);
 }
-
-
-void send_windows_to_gpu(vector<string> & sequences, int window, char **d_seq) {
-    cudaError_t cudaStatus;
-	//Concatenate sequences
-    stringstream ss;
-	for(string & seq : sequences) {
-		ss << seq.substr(0, window);
-	}
-
-	string all = bases_to_indices(ss.str());
-	int size = all.size();
-	
-	//Send sequences to GPU
-	cudaStatus = cudaMalloc(d_seq, size);
-	assert (cudaSuccess == cudaStatus);
-	cudaMemcpy(*d_seq, &all[0], size, cudaMemcpyHostToDevice);
-	assert (cudaSuccess == cudaStatus);
-}
-
 
 
 //Add Sequences to the Model
 void IMM::add(vector<string> & sequences) {
 	char *d_seq;
 	send_windows_to_gpu(sequences, window, &d_seq);
+
+	//wait for device
+	cudaDeviceSynchronize();
 	
 	//invoke counting kernel
 	int num_sequences = sequences.size();
-	dim3 threads_per_block(num_sequences,window,order+1);
-	dim3 blocks(1,1,1);
+	dim3 threads_per_block(num_sequences,1,1);
+	dim3 blocks(1,window,order+1);
     counting_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, order_sum, order, window);
 
 	//Cleanup
@@ -223,7 +235,7 @@ __device__ __host__ void build_distribution(int * model, char * sequence, int le
 
 
 //Performs a Chi^2 test on a pair of orders (order, order+1) with sequence at index
-__device__ __host__ float score_order_pair(int * model, char * sequence, int order) {
+__device__ __host__ float score_order_pair(int * model, char * sequence, int order, int * next_order_count) {
 	//create distribution with lower-order model
 	int lower_order_dist[4];
 	build_distribution(model, sequence, order+1, lower_order_dist);
@@ -234,46 +246,149 @@ __device__ __host__ float score_order_pair(int * model, char * sequence, int ord
 	int table[8];
 	build_chi2_table(lower_order_dist, higher_order_dist, table, 4);
 	float score = chi_squared_score(table, 4);
+	//calculate next-order count
+	*next_order_count = 0;
+	for(int i = 0; i < 4; i++) {
+		*next_order_count += higher_order_dist[i];
+	}
+
 	return score;
 }
 
 
 
-
-__global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int max_order) {
+//Computes lambdas then score the sequence
+__global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int max_order, int pos_size, float * pvalues) {
     int num = threadIdx.x; //sequence number
 	int position = threadIdx.y; //position index
-	int order = threadIdx.z; //order number
+    
+	//get sequence
+	char * sequence = sequences + num * window + position;
 
 	//Compute lambdas at position based on model
+	float lambdas[IMM_MAX_ORDER] = {1.0};
+	model += position * pos_size;
+	
+	max_order = min(max_order, position);
+	for(int order = 0; order <= max_order; order++) {
+		int next_order_count;
+		float chi2_score = score_order_pair(model, sequence, order, &next_order_count);
+		int chi2_index = (int)(chi2_score * 10.0f);
+		float probability = pvalues[chi2_index];
+		float d = 1.0f - probability;
+		float value;
+		if(next_order_count > IMM_MIN_COUNT) {
+			value = 1.0f;
+		} else if(d > 0.5f) {
+			value = d * next_order_count / 40.0f;
+		} else {
+			value = 0.0f;
+		}
+		lambdas[order] = value;
+		printf("num: %d, order: %d, value: %f\n", num, order, value);
+	}
 
 	//Score character based on lambdas
+
 }
 
 
 void IMM::score(vector<string> & sequences) {
+    cudaError_t cudaStatus;
+	//allocate memory for scores
+	float *d_scores;
+	size_t size = sequences.size() * window * sizeof(float);
+	cudaStatus = cudaMalloc(&d_scores, size);
+	assert (cudaSuccess == cudaStatus);
+
 	//send sequences to gpu
 	char *d_seq;
 	send_windows_to_gpu(sequences, window, &d_seq);
 
 	//Score Positions
 	int num_sequences = sequences.size();
-	dim3 threads_per_block(num_sequences,2,order+1);
+	dim3 threads_per_block(num_sequences,window,order+1); //TODO: +1 needed??
 	dim3 blocks(1,1,1);
-    counting_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, order_sum, order, window);
+    scoring_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, d_scores, window, order, order_sum, d_chi2_pvalue_table);
+
+	//sum scores, use Thrust library?
 
 	//Cleanup
 	cudaFree(d_seq);
+	cudaFree(d_scores);
+}
+
+
+//Load chi2->Probability values from file
+void IMM::load_pvalues(string & filename) {
+    cudaError_t cudaStatus;
+	vector<float> pvalues;
+	ifstream file(filename);
+	string line;
+
+	getline(file, line); //skip first line
+	while(file.good()) {
+		float chi2, pvalue;
+		file >> chi2;
+		file >> pvalue;
+		pvalues.push_back(pvalue);
+	}
+
+	//allocate memory then send to gpu
+	size_t size = pvalues.size() * sizeof(float);
+	cudaStatus = cudaMalloc(&d_chi2_pvalue_table, size);
+	assert (cudaSuccess == cudaStatus);
+	cudaStatus = cudaMemcpy(d_chi2_pvalue_table, &pvalues[0], size, cudaMemcpyHostToDevice);
+	assert (cudaSuccess == cudaStatus);
+
+	//cleanup
+	file.close();
+}
+
+
+void read_fasta(vector<string> & sequences, string & filename) {
+	//vector<string> descriptions;
+	ifstream file(filename);
+	stringstream ss;
+	string sequence;
+	string description;
+
+	while(file.good()) {
+		string line;
+		getline(file, line);
+		if(line.size() <= 0) {
+			continue;
+		} else if(line[0] == '>') {
+			if(description.size() > 0) {
+				sequences.push_back(sequence);
+				//sequences.push_back(description);
+			}
+			description = line.substr(1);
+			sequence.clear();
+		} else {
+			sequence.append(line);
+		}
+	}
+	if(sequence.size() > 0) {
+		sequences.push_back(sequence);
+	}
+	//cleanup
+	file.close();
 }
 
 
 //Dump model to a vector of ints
 void IMM::dump(vector<int> & result) {
+    cudaError_t cudaStatus;
+	//wait for device
+	cudaDeviceSynchronize();
+
 	//setup result vector
 	result.clear();
 	int arr_size = total_bytes / sizeof(int);
 	result.resize(arr_size);
 
 	//copy data from gpu
-	cudaMemcpy(&result[0], d_counts, total_bytes, cudaMemcpyDeviceToHost);
+	cudaStatus = cudaMemcpy(&result[0], d_counts, total_bytes, cudaMemcpyDeviceToHost);
+	assert (cudaSuccess == cudaStatus);
 }
