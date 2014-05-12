@@ -268,7 +268,7 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 	char * sequence_position;
 
     int num = threadIdx.x; //sequence number
-	int position = threadIdx.y; //position index
+	int position = blockIdx.y; //position index
     
 	//get sequence
 	char * sequence = sequences + num * window;
