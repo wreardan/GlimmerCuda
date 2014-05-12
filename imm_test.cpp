@@ -145,7 +145,7 @@ bool test_imm_3() {
 	vector<string> test_sequences;
 	test_sequences.push_back(string("ATGATTTGA"));
 	//test_sequences.push_back(string("GCGCGCCGCGCG"));
-	imm.score(test_sequences);
+	//imm.score(test_sequences);
 
 	return true;
 }
@@ -165,12 +165,25 @@ bool test_imm_4() {
 
 	vector<int> dumped;
 	imm.dump(dumped);
+
+	/*
+	for(int i = 0; i < dumped.size(); i++) {
+		printf("%d\n", dumped[i]);
+	}
+	*/
 	
 	vector<string> test_sequences;
+	vector<float> scores;
 	filename = "hw3_test_real";
 	read_sequences(test_sequences, filename);
-	test_sequences.resize(100);
-	imm.score(test_sequences);
+	test_sequences.resize(1);
+	imm.score(test_sequences, scores);
+	
+	/*
+	for(int i = 0; i < scores.size(); i++) {
+		printf("%f\n", scores[i]);
+	}
+	*/
 
 	return true;
 }

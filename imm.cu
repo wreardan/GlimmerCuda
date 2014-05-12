@@ -142,7 +142,7 @@ __host__ __device__ int get_sequence_order_index(char * sequence, int order) {
 
 
 __host__ __device__ int get_dist_sequence_order_index(char * sequence, int order) {
-	int index = get_sequence_index(sequence, order + 1) * 4;
+	int index = get_sequence_index(sequence, order) * 4;
 	int order_index = get_order_index(sequence, order);
 	return index + order_index;
 }
@@ -231,9 +231,9 @@ __device__ __host__ void build_chi2_table(int * dist1, int * dist2, int * output
 }
 
 //Build a distribution from an order of the model based on a subsequence
-__device__ __host__ void build_distribution(int * model, char * sequence, int length, int *output) {
+__device__ __host__ void build_distribution(int * model, char * sequence, int order, int *output) {
 	//TODO: take position into account, or input custom model pointer
-	int index = get_dist_sequence_order_index(sequence, length-1);
+	int index = get_dist_sequence_order_index(sequence, order);
 
 	for(int b = 0; b < 4; b++) {
 		output[b] = model[index+b];
@@ -248,7 +248,7 @@ __device__ __host__ float score_order_pair(int * model, char * sequence, int ord
 	build_distribution(model, sequence, order, lower_order_dist);
 	//create distribution with order+1 model
 	int higher_order_dist[4];
-	build_distribution(model, sequence, order+1, higher_order_dist);
+	build_distribution(model, sequence-1, order+1, higher_order_dist);
 	//chi-squared test
 	int table[8];
 	build_chi2_table(lower_order_dist, higher_order_dist, table, 4);
@@ -293,35 +293,36 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 			value = 0.0f;
 		}
 		lambdas[order+1] = value;
-		//printf("num: %d, order: %d, position: %d, lambda: %f\n", num, order, position, value);
+		//printf("%d, %d, %d, %f\n", num, order+1, position, value);
+		printf("num: %d, order: %d, position: %d, lambda: %f\n", num, order+1, position, value);
 	}
 
 	//Score character based on lambdas
 	float score = 0.0f;
 	float weight = 1.0f;
-	for(int order = max_order; order >= 0; order--) {
+	for(int order = max_order-1; order >= 0; order--) {
 		int index = get_sequence_order_index(sequence, order);
 		int count = model[index];
 
-		int dist_index = get_sequence_order_index(sequence, order);
+		int dist_index = get_dist_sequence_order_index(sequence, order+1);
 		int sum = 0;
 		for(int base = 0; base < 4; base++) {
-			int count = model[dist_index + base];
-			sum += count;
+			int c = model[dist_index + base];
+			sum += c;
 		}
 		float probability = (count + 1.0f) / (sum + 4.0f);
 		float weighted = lambdas[order] * weight;
 		score += probability * weighted;
 		weight *= 1 - lambdas[order];
 	}
-	//printf("num: %d, position: %d, score: %f\n", num, position, score);
+	printf("num: %d, position: %d, score: %f\n", num, position, score);
 
 	int score_index = num*window + position;
 	scores[score_index] = log(score);
 }
 
 
-void IMM::score(vector<string> & sequences) {
+void IMM::score(vector<string> & sequences, vector<float> & scores) {
     cudaError_t cudaStatus;
 	//allocate memory for scores
 	float *d_scores;
@@ -342,7 +343,6 @@ void IMM::score(vector<string> & sequences) {
 	//wait for device
 	cudaDeviceSynchronize();
 
-	vector<float> scores;
 	//sum scores, use Thrust library?
 	float * raw_scores = new float[size];
 	cudaStatus = cudaMemcpy(raw_scores, d_scores, size, cudaMemcpyDeviceToHost);
@@ -352,6 +352,7 @@ void IMM::score(vector<string> & sequences) {
 		float score = 0.0f;
 		for(int pos = 0; pos < window; pos++) {
 			score += raw_scores[i * window + pos];
+			//printf("position: %d, score: %f\n", pos, score);
 		}
 		scores.push_back(score);
 	}
