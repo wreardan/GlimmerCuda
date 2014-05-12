@@ -78,7 +78,7 @@ __host__ __device__ unsigned int power (unsigned int x, unsigned int y)
 
 
 void send_windows_to_gpu(vector<string> & sequences, int window, char **d_seq) {
-    cudaError_t cudaStatus;
+    cudaError_t cuda_status;
 	//Concatenate sequences
     stringstream ss;
 	for(string & seq : sequences) {
@@ -89,10 +89,10 @@ void send_windows_to_gpu(vector<string> & sequences, int window, char **d_seq) {
 	int size = all.size();
 	
 	//Send sequences to GPU
-	cudaStatus = cudaMalloc(d_seq, size);
-	assert (cudaSuccess == cudaStatus);
+	cuda_status = cudaMalloc(d_seq, size);
+	assert (cudaSuccess == cuda_status);
 	cudaMemcpy(*d_seq, &all[0], size, cudaMemcpyHostToDevice);
-	assert (cudaSuccess == cudaStatus);
+	assert (cudaSuccess == cuda_status);
 }
 
 
@@ -109,11 +109,11 @@ void IMM::init(int window, int order) {
 
 	total_bytes = window * order_sum * sizeof(int);
 	
-    cudaError_t cudaStatus;
-	cudaStatus = cudaMalloc(&d_counts, total_bytes);
-	assert (cudaSuccess == cudaStatus);
-	cudaStatus = cudaMemset(d_counts, 0, total_bytes);
-	assert (cudaSuccess == cudaStatus);
+    cudaError_t cuda_status;
+	cuda_status = cudaMalloc(&d_counts, total_bytes);
+	assert (cudaSuccess == cuda_status);
+	cuda_status = cudaMemset(d_counts, 0, total_bytes);
+	assert (cudaSuccess == cuda_status);
 }
 
 __host__ __device__ int get_sequence_index(char * sequence, int length) {
@@ -267,7 +267,7 @@ __device__ __host__ float score_order_pair(int * model, char * sequence, int ord
 __global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int max_order, int pos_size, float * pvalues) {
 	char * sequence_position;
 
-    int num = threadIdx.x; //sequence number
+    int num = threadIdx.x + blockIdx.x * blockDim.x; //sequence number
 	int position = blockIdx.y; //position index
     
 	//get sequence
@@ -328,12 +328,17 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 
 
 void IMM::score(vector<string> & sequences, vector<float> & scores) {
-    cudaError_t cudaStatus;
+    cudaError_t cuda_status;
+	//assertions
+	assert(d_chi2_pvalue_table != NULL);
+	assert(order <= IMM_MAX_ORDER);
+	assert(window >= order);
+
 	//allocate memory for scores
 	float *d_scores;
 	size_t size = sequences.size() * window * sizeof(float);
-	cudaStatus = cudaMalloc(&d_scores, size);
-	assert (cudaSuccess == cudaStatus);
+	cuda_status = cudaMalloc(&d_scores, size);
+	assert (cudaSuccess == cuda_status);
 
 	//send sequences to gpu
 	char *d_seq;
@@ -350,8 +355,8 @@ void IMM::score(vector<string> & sequences, vector<float> & scores) {
 
 	//sum scores, use Thrust library?
 	float * raw_scores = new float[size];
-	cudaStatus = cudaMemcpy(raw_scores, d_scores, size, cudaMemcpyDeviceToHost);
-	assert (cudaSuccess == cudaStatus);
+	cuda_status = cudaMemcpy(raw_scores, d_scores, size, cudaMemcpyDeviceToHost);
+	assert (cudaSuccess == cuda_status);
 
 	for(int i = 0; i < num_sequences; i++) {
 		float score = 0.0f;
@@ -373,7 +378,7 @@ void IMM::score(vector<string> & sequences, vector<float> & scores) {
 
 //Load chi2->Probability values from file
 void IMM::load_pvalues(string & filename) {
-    cudaError_t cudaStatus;
+    cudaError_t cuda_status;
 	vector<float> pvalues;
 	ifstream file(filename);
 	string line;
@@ -388,10 +393,10 @@ void IMM::load_pvalues(string & filename) {
 
 	//allocate memory then send to gpu
 	size_t size = pvalues.size() * sizeof(float);
-	cudaStatus = cudaMalloc(&d_chi2_pvalue_table, size);
-	assert (cudaSuccess == cudaStatus);
-	cudaStatus = cudaMemcpy(d_chi2_pvalue_table, &pvalues[0], size, cudaMemcpyHostToDevice);
-	assert (cudaSuccess == cudaStatus);
+	cuda_status = cudaMalloc(&d_chi2_pvalue_table, size);
+	assert (cudaSuccess == cuda_status);
+	cuda_status = cudaMemcpy(d_chi2_pvalue_table, &pvalues[0], size, cudaMemcpyHostToDevice);
+	assert (cudaSuccess == cuda_status);
 
 	//cleanup
 	file.close();
@@ -445,7 +450,7 @@ void read_sequences(vector<string> & sequences, string & filename) {
 
 //Dump model to a vector of ints
 void IMM::dump(vector<int> & result) {
-    cudaError_t cudaStatus;
+    cudaError_t cuda_status;
 	//wait for device
 	cudaDeviceSynchronize();
 
@@ -455,6 +460,6 @@ void IMM::dump(vector<int> & result) {
 	result.resize(arr_size);
 
 	//copy data from gpu
-	cudaStatus = cudaMemcpy(&result[0], d_counts, total_bytes, cudaMemcpyDeviceToHost);
-	assert (cudaSuccess == cudaStatus);
+	cuda_status = cudaMemcpy(&result[0], d_counts, total_bytes, cudaMemcpyDeviceToHost);
+	assert (cudaSuccess == cuda_status);
 }
