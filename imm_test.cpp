@@ -205,21 +205,26 @@ bool test_imm_3() {
 }
 
 bool test_imm_4() {
-	IMM imm;
+	IMM positive_imm, negative_imm;
 	string filename;
 
-	imm.init(9, 5);
-	filename = "chisquare_df3_pvalues";
-	imm.load_pvalues(filename);
+	positive_imm.init(9, 5);
 
-	vector<string> training_sequences;
+	vector<string> train_real;
 	filename = "hw3_train_real";
-	read_sequences(training_sequences, filename);
+	read_sequences(train_real, filename);
 	//training_sequences.resize(1);
-	imm.add(training_sequences);
+	positive_imm.add(train_real);
 
 	vector<int> dumped;
-	imm.dump(dumped);
+	positive_imm.dump(dumped);
+	
+	negative_imm.init(9, 5);
+	vector<string> train_false;
+	filename = "hw3_train_false";
+	read_sequences(train_false, filename);
+	//training_sequences.resize(1);
+	negative_imm.add(train_false);
 	
 	/*
 	for(int i = 0; i < 24; i++) {
@@ -232,17 +237,23 @@ bool test_imm_4() {
 		printf("%d %d\n", i, dumped[i]);
 	}
 	*/
+	filename = "chisquare_df3_pvalues";
+	positive_imm.load_pvalues(filename);
+	negative_imm.load_pvalues(filename);
 	
 	vector<string> test_sequences;
 	vector<float> scores;
 	filename = "hw3_test_real";
 	read_sequences(test_sequences, filename);
-	test_sequences.resize(1);
-	imm.score(test_sequences, scores);
+	test_sequences.resize(10);
+
+	positive_imm.score(test_sequences, scores);
 	
+	vector<float> negative_scores;
+	negative_imm.score(test_sequences, negative_scores);
 	
 	for(int i = 0; i < scores.size(); i++) {
-		printf("%f\n", scores[i]);
+		printf("%f\n", scores[i] - negative_scores[i]);
 	}
 	
 

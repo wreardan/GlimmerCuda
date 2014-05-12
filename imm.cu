@@ -316,13 +316,14 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 		//printf("%d %d %d %d\n", position, order, count, sum);
 		float probability = (count + 1.0f) / (sum + 4.0f);
 		float weighted = lambdas[order] * weight;
+		//printf("weighted: %f\n", weighted);
 		score += probability * weighted;
 		weight *= 1 - lambdas[order];
 	}
-	printf("num: %d, position: %d, score: %f\n", num, position, log(score));
+	//printf("num: %d, position: %d, score: %f\n", num, position, log10(score));
 
 	int score_index = num*window + position;
-	scores[score_index] = log(score);
+	scores[score_index] = log10(score);
 }
 
 
@@ -358,6 +359,7 @@ void IMM::score(vector<string> & sequences, vector<float> & scores) {
 			score += raw_scores[i * window + pos];
 			//printf("position: %d, score: %f\n", pos, score);
 		}
+		//printf("sequence: %d, score: %f\n", i, score);
 		scores.push_back(score);
 	}
 
