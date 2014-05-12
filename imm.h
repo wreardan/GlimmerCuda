@@ -19,6 +19,7 @@ __host__ __device__ float chi_squared_score(int * table, int length);
 __device__ __host__ float score_order_pair(int * model, char * sequence, int order, int * next_order_count);
 
 void read_fasta(vector<string> & sequences, string & filename);
+void read_sequences(vector<string> & sequences, string & filename);
 
 /*
 This class represents an Interpolated Markov Model

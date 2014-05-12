@@ -6,6 +6,9 @@
 #include <iostream>
 #include <fstream>
 
+#include <thrust/device_ptr.h>
+#include <thrust/reduce.h>
+
 using namespace std;
 
 
@@ -138,6 +141,13 @@ __host__ __device__ int get_sequence_order_index(char * sequence, int order) {
 }
 
 
+__host__ __device__ int get_dist_sequence_order_index(char * sequence, int order) {
+	int index = get_sequence_index(sequence, order + 1) * 4;
+	int order_index = get_order_index(sequence, order);
+	return index + order_index;
+}
+
+
 //this kernel builds the imm from a set of training sequences
 __global__ void counting_kernel(int *model, char * sequences, int pos_size, int max_order, int window) {
     int num = threadIdx.x; //sequence number
@@ -172,7 +182,7 @@ void IMM::add(vector<string> & sequences) {
 	//invoke counting kernel
 	int num_sequences = sequences.size();
 	dim3 threads_per_block(num_sequences,1,1);
-	dim3 blocks(1,window,order+1);
+	dim3 blocks(1,window,order+1); //TODO: +1 needed??
     counting_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, order_sum, order, window);
 
 	//Cleanup
@@ -223,9 +233,7 @@ __device__ __host__ void build_chi2_table(int * dist1, int * dist2, int * output
 //Build a distribution from an order of the model based on a subsequence
 __device__ __host__ void build_distribution(int * model, char * sequence, int length, int *output) {
 	//TODO: take position into account, or input custom model pointer
-	int order_index = get_order_index(sequence, length-1);
-	int index = get_sequence_index(sequence, length-1) * 4;
-	index += order_index;
+	int index = get_dist_sequence_order_index(sequence, length-1);
 
 	for(int b = 0; b < 4; b++) {
 		output[b] = model[index+b];
@@ -233,15 +241,14 @@ __device__ __host__ void build_distribution(int * model, char * sequence, int le
 }
 
 
-
 //Performs a Chi^2 test on a pair of orders (order, order+1) with sequence at index
 __device__ __host__ float score_order_pair(int * model, char * sequence, int order, int * next_order_count) {
 	//create distribution with lower-order model
 	int lower_order_dist[4];
-	build_distribution(model, sequence, order+1, lower_order_dist);
+	build_distribution(model, sequence, order, lower_order_dist);
 	//create distribution with order+1 model
 	int higher_order_dist[4];
-	build_distribution(model, sequence, order+2, higher_order_dist);
+	build_distribution(model, sequence, order+1, higher_order_dist);
 	//chi-squared test
 	int table[8];
 	build_chi2_table(lower_order_dist, higher_order_dist, table, 4);
@@ -256,24 +263,25 @@ __device__ __host__ float score_order_pair(int * model, char * sequence, int ord
 }
 
 
-
 //Computes lambdas then score the sequence
 __global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int max_order, int pos_size, float * pvalues) {
     int num = threadIdx.x; //sequence number
 	int position = threadIdx.y; //position index
     
 	//get sequence
-	char * sequence = sequences + num * window + position;
+	char * sequence = sequences + num * window;
 
 	//Compute lambdas at position based on model
 	float lambdas[IMM_MAX_ORDER] = {1.0};
 	model += position * pos_size;
 	
 	max_order = min(max_order, position);
-	for(int order = 0; order <= max_order; order++) {
+	for(int order = 0; order < max_order; order++) {
 		int next_order_count;
-		float chi2_score = score_order_pair(model, sequence, order, &next_order_count);
+		char * sequence_position = sequence + position - order;
+		float chi2_score = score_order_pair(model, sequence_position, order, &next_order_count);
 		int chi2_index = (int)(chi2_score * 10.0f);
+		chi2_index = min(chi2_index, 50);
 		float probability = pvalues[chi2_index];
 		float d = 1.0f - probability;
 		float value;
@@ -284,12 +292,32 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 		} else {
 			value = 0.0f;
 		}
-		lambdas[order] = value;
-		printf("num: %d, order: %d, value: %f\n", num, order, value);
+		lambdas[order+1] = value;
+		//printf("num: %d, order: %d, position: %d, lambda: %f\n", num, order, position, value);
 	}
 
 	//Score character based on lambdas
+	float score = 0.0f;
+	float weight = 1.0f;
+	for(int order = max_order; order >= 0; order--) {
+		int index = get_sequence_order_index(sequence, order);
+		int count = model[index];
 
+		int dist_index = get_sequence_order_index(sequence, order);
+		int sum = 0;
+		for(int base = 0; base < 4; base++) {
+			int count = model[dist_index + base];
+			sum += count;
+		}
+		float probability = (count + 1.0f) / (sum + 4.0f);
+		float weighted = lambdas[order] * weight;
+		score += probability * weighted;
+		weight *= 1 - lambdas[order];
+	}
+	//printf("num: %d, position: %d, score: %f\n", num, position, score);
+
+	int score_index = num*window + position;
+	scores[score_index] = log(score);
 }
 
 
@@ -307,13 +335,30 @@ void IMM::score(vector<string> & sequences) {
 
 	//Score Positions
 	int num_sequences = sequences.size();
-	dim3 threads_per_block(num_sequences,window,order+1); //TODO: +1 needed??
+	dim3 threads_per_block(num_sequences,window,1);
 	dim3 blocks(1,1,1);
     scoring_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, d_scores, window, order, order_sum, d_chi2_pvalue_table);
+	
+	//wait for device
+	cudaDeviceSynchronize();
 
+	vector<float> scores;
 	//sum scores, use Thrust library?
+	float * raw_scores = new float[size];
+	cudaStatus = cudaMemcpy(raw_scores, d_scores, size, cudaMemcpyDeviceToHost);
+	assert (cudaSuccess == cudaStatus);
+
+	for(int i = 0; i < num_sequences; i++) {
+		float score = 0.0f;
+		for(int pos = 0; pos < window; pos++) {
+			score += raw_scores[i * window + pos];
+		}
+		scores.push_back(score);
+	}
+
 
 	//Cleanup
+	delete raw_scores;
 	cudaFree(d_seq);
 	cudaFree(d_scores);
 }
@@ -375,6 +420,20 @@ void read_fasta(vector<string> & sequences, string & filename) {
 	//cleanup
 	file.close();
 }
+
+
+void read_sequences(vector<string> & sequences, string & filename) {
+	ifstream file(filename);
+	while(file.good()) {
+		string sequence;
+		getline(file, sequence);
+		if(sequence.size() > 0) {
+			sequences.push_back(sequence);
+		}
+	}
+	file.close();
+}
+
 
 
 //Dump model to a vector of ints

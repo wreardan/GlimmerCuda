@@ -9,7 +9,8 @@
 void imm_test() {
 	//assert(test_imm_1());
 	//assert(test_imm_2());
-	assert(test_imm_3());
+	//assert(test_imm_3());
+	assert(test_imm_4());
 
 	//assert(test_chi_squared_test());
 	//assert(test_build_distribution());
@@ -123,11 +124,12 @@ bool test_imm_2() {
 }
 
 
+//a more interesting test using actual data
 bool test_imm_3() {
 	IMM imm;
 	string filename;
 
-	imm.init(9, 8);
+	imm.init(9, 5);
 	filename = "chisquare_df3_pvalues";
 	imm.load_pvalues(filename);
 
@@ -142,6 +144,32 @@ bool test_imm_3() {
 	
 	vector<string> test_sequences;
 	test_sequences.push_back(string("ATGATTTGA"));
+	//test_sequences.push_back(string("GCGCGCCGCGCG"));
+	imm.score(test_sequences);
+
+	return true;
+}
+
+bool test_imm_4() {
+	IMM imm;
+	string filename;
+
+	imm.init(9, 5);
+	filename = "chisquare_df3_pvalues";
+	imm.load_pvalues(filename);
+
+	vector<string> training_sequences;
+	filename = "hw3_train_real";
+	read_sequences(training_sequences, filename);
+	imm.add(training_sequences);
+
+	vector<int> dumped;
+	imm.dump(dumped);
+	
+	vector<string> test_sequences;
+	filename = "hw3_test_real";
+	read_sequences(test_sequences, filename);
+	test_sequences.resize(100);
 	imm.score(test_sequences);
 
 	return true;
