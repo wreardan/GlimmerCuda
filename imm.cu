@@ -341,8 +341,8 @@ void IMM::score(vector<string> & sequences, vector<float> & scores) {
 
 	//Score Positions
 	int num_sequences = sequences.size();
-	dim3 threads_per_block(num_sequences,window,1);
-	dim3 blocks(1,1,1);
+	dim3 threads_per_block(num_sequences,1,1);
+	dim3 blocks(1,window,1);
     scoring_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, d_scores, window, order, order_sum, d_chi2_pvalue_table);
 	
 	//wait for device

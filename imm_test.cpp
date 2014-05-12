@@ -245,14 +245,14 @@ bool test_imm_4() {
 	vector<float> scores;
 	filename = "hw3_test_real";
 	read_sequences(test_sequences, filename);
-	test_sequences.resize(10);
+	test_sequences.resize(800);
 
 	positive_imm.score(test_sequences, scores);
 	
 	vector<float> negative_scores;
 	negative_imm.score(test_sequences, negative_scores);
 	
-	for(int i = 0; i < scores.size(); i++) {
+	for(int i = 0; i < 10; i++) {
 		printf("%f\n", scores[i] - negative_scores[i]);
 	}
 	
