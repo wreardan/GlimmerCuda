@@ -213,17 +213,20 @@ bool test_imm_4() {
 	vector<string> train_real;
 	filename = "hw3_train_real";
 	read_sequences(train_real, filename);
-	//training_sequences.resize(1);
+	train_real.resize(512);
 	positive_imm.add(train_real);
 
+	/*
 	vector<int> dumped;
 	positive_imm.dump(dumped);
-	
+	*/
+
 	negative_imm.init(9, 5);
 	vector<string> train_false;
 	filename = "hw3_train_false";
 	read_sequences(train_false, filename);
 	//training_sequences.resize(1);
+	train_false.resize(512);
 	negative_imm.add(train_false);
 	
 	/*

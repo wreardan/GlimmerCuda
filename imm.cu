@@ -82,6 +82,7 @@ void send_windows_to_gpu(vector<string> & sequences, int window, char **d_seq) {
 	//Concatenate sequences
     stringstream ss;
 	for(string & seq : sequences) {
+		assert(seq.size() >= window);
 		ss << seq.substr(0, window);
 	}
 
@@ -184,6 +185,10 @@ void IMM::add(vector<string> & sequences) {
 	dim3 threads_per_block(num_sequences,1,1);
 	dim3 blocks(1,window,order+1); //TODO: +1 needed??
     counting_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, order_sum, order, window);
+	cudaError cuda_status = cudaGetLastError();
+	if ( cudaSuccess != cuda_status ) {
+		printf("IMM:add counting_kernel failed to execute with error: %d\n", cuda_status);
+	}
 
 	//Cleanup
 	cudaFree(d_seq);
