@@ -41,7 +41,7 @@ public:
 	void init(int window, int order);
 	void load_pvalues(string & filename);
 	void add(vector<string> & sequences);
-	void score(vector<string> & sequences, vector<float> & scores);
+	void score(vector<string> & sequences, vector<float> & scores, bool large_sequence=false);
 	void dump(vector<int> & result);
 	void dispose();
 };

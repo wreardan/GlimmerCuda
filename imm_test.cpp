@@ -7,9 +7,9 @@
 
 
 void imm_test() {
-	/*assert(test_imm_1());
+	assert(test_imm_1());
 	assert(test_imm_2());
-	assert(test_imm_3());*/
+	assert(test_imm_3());
 	//test_imm_start_codons();
 	assert(test_imm_4());
 
@@ -106,10 +106,10 @@ bool test_imm_start_codons() {
 
 	int arr[] = {
 		//First Position
-		2,1,1,1, //0th order
-		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, //1st order
+		2,1,1,1, //0th order [A,C,G,T]
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, //1st order [AA..TT]
 
-		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, //2nd order
+		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, //2nd order [AAA..TTT]
 		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
 		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
 		0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,

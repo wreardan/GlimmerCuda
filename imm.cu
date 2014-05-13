@@ -269,7 +269,7 @@ __device__ __host__ float score_order_pair(int * model, char * sequence, int ord
 
 
 //Computes lambdas then score the sequence
-__global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int max_order, int pos_size, float * pvalues) {
+__global__ void scoring_kernel(int *model, char * sequences, float * scores, int window, int window_step, int max_order, int pos_size, float * pvalues) {
 	char * sequence_position;
 
     int num = threadIdx.x + blockIdx.x * blockDim.x; //sequence number
@@ -332,7 +332,7 @@ __global__ void scoring_kernel(int *model, char * sequences, float * scores, int
 }
 
 
-void IMM::score(vector<string> & sequences, vector<float> & scores) {
+void IMM::score(vector<string> & sequences, vector<float> & scores, bool large_sequence) {
     cudaError_t cuda_status;
 	//assertions
 	assert(d_chi2_pvalue_table != NULL);
@@ -349,11 +349,21 @@ void IMM::score(vector<string> & sequences, vector<float> & scores) {
 	char *d_seq;
 	send_windows_to_gpu(sequences, window, &d_seq);
 
+	//set window step
+	int window_step;
+	if(large_sequence) {
+		window_step = 1;
+	} else {
+		window_step = window;
+	}
+
+
+
 	//Score Positions
 	int num_sequences = sequences.size();
 	dim3 threads_per_block(num_sequences,1,1);
 	dim3 blocks(1,window,1);
-    scoring_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, d_scores, window, order, order_sum, d_chi2_pvalue_table);
+    scoring_kernel<<<blocks, threads_per_block>>>(d_counts, d_seq, d_scores, window, window_step, order, order_sum, d_chi2_pvalue_table);
 	
 	//wait for device
 	cudaDeviceSynchronize();
